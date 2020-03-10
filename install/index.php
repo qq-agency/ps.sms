@@ -40,6 +40,12 @@ class ps_sms extends CModule
             return false;
         }
 
+        if (!defined('BX_UTF') || BX_UTF === false) {
+            global $APPLICATION;
+            $APPLICATION->ThrowException(Loc::getMessage('PS_SMS_UTF8_ERROR'));
+            return false;
+        }
+
         $this->InstallEvents();
 
         ModuleManager::registerModule($this->MODULE_ID);

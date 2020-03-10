@@ -1,7 +1,7 @@
 {
   "name": "qq-agency/ps.sms",
   "description": "1C-Bitrix SMS providers",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "bitrix-d7-module",
   "keywords": [
     "bitrix",

@@ -21,7 +21,23 @@ class TurboSMS
         $this->password = $password;
 
         try {
-            $this->client = new \SoapClient('http://turbosms.in.ua/api/wsdl.html', ['exceptions' => true]);
+            $context = stream_context_create(
+                [
+                    'ssl' => [
+                        'verify_peer' => false,
+                        'verify_peer_name' => false,
+                        'allow_self_signed' => true
+                    ]
+                ]
+            );
+
+            $this->client = new \SoapClient(
+                'https://turbosms.in.ua/api/wsdl.html',
+                [
+                    'exceptions' => true,
+                    'stream_context' => $context
+                ]
+            );
         } catch (\SoapFault $e) {
         }
     }
