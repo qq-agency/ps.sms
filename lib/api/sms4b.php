@@ -4,21 +4,18 @@ namespace Ps\Sms\Api;
 
 use Bitrix\Main\Error;
 use Bitrix\Main\Result;
+use Ps\Sms\Model\Balance;
+use Ps\Sms\Model\SenderCollection;
 
-class Sms4b
+class Sms4b extends Base
 {
-    private $login;
-
-    private $password;
-
     private $client;
 
     private $session;
 
-    public function __construct($login, $password)
+    public function __construct()
     {
-        $this->login = $login;
-        $this->password = $password;
+        parent::__construct();
 
         try {
             $this->client = new \SoapClient('https://sms4b.ru/ws/sms.asmx?wsdl', ['exceptions' => true]);
@@ -38,19 +35,49 @@ class Sms4b
 
     private function query($method, $parameters = [])
     {
-        $result = new Result();
+        return (array)$this->client->__soapCall($method, [$parameters]);
+    }
 
-        try {
-            $data = $this->client->__soapCall($method, [$parameters]);
+    public function getAccount()
+    {
+        $this->getSession();
 
-            $result->setData((array)$data);
-        } catch (\Exception $e) {
-            $result->addError(new Error($e->getMessage()));
+        $data = $this->query(
+            'ParamSMS',
+            [
+                'SessionId' => $this->session,
+            ]
+        );
 
-            return $result;
+        return (array)$data['ParamSMSResult'];
+    }
+
+    private function getSession()
+    {
+        $data = $this->query(
+            'StartSession',
+            [
+                'Login' => $this->login,
+                'Password' => $this->password,
+                'Gmt' => 3,
+            ]
+        );
+
+        if ($data['StartSessionResult'] > 0) {
+            $this->session = $data['StartSessionResult'];
         }
 
-        return $result;
+        return $data;
+    }
+
+    public function getBalance()
+    {
+        return new Balance();
+    }
+
+    public function getSenderList()
+    {
+        return new SenderCollection();
     }
 
     public function send($parameters)
@@ -65,59 +92,6 @@ class Sms4b
             $result->addError(new Error($e->getMessage()));
 
             return $result;
-        }
-
-        return $result;
-    }
-
-    public function getAccount()
-    {
-        $result = new Result();
-
-        $this->getSession();
-
-        $response = $this->query(
-            'ParamSMS',
-            [
-                'SessionId' => $this->session,
-            ]
-        );
-
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-
-            return $result;
-        }
-
-        $data = $response->getData();
-        $dataResult = (array)$data['ParamSMSResult'];
-
-        $result->setData($dataResult);
-
-        return $result;
-    }
-
-    private function getSession()
-    {
-        $result = new Result();
-
-        $response = $this->query(
-            'StartSession',
-            [
-                'Login' => $this->login,
-                'Password' => $this->password,
-                'Gmt' => 3,
-            ]
-        );
-
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-        }
-
-        $data = $response->getData();
-
-        if ($data['StartSessionResult'] > 0) {
-            $this->session = $data['StartSessionResult'];
         }
 
         return $result;

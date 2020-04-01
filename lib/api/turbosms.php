@@ -2,68 +2,39 @@
 
 namespace Ps\Sms\Api;
 
-use Bitrix\Main\Error;
 use Bitrix\Main\Localization\Loc;
-use Bitrix\Main\Result;
+use Ps\Sms\Model\Balance;
+use Ps\Sms\Model\SenderCollection;
 
-class TurboSMS
+class TurboSMS extends Base
 {
-    private $login;
-
-    private $password;
-
     private $client;
 
-    public function __construct($login, $password)
+    public function __construct()
     {
-        $this->login = $login;
+        parent::__construct();
 
-        $this->password = $password;
-
-        try {
-            $context = stream_context_create(
-                [
-                    'ssl' => [
-                        'verify_peer' => false,
-                        'verify_peer_name' => false,
-                        'allow_self_signed' => true
-                    ]
+        $context = stream_context_create(
+            [
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
                 ]
-            );
+            ]
+        );
 
-            $this->client = new \SoapClient(
-                'https://turbosms.in.ua/api/wsdl.html',
-                [
-                    'exceptions' => true,
-                    'stream_context' => $context
-                ]
-            );
-        } catch (\SoapFault $e) {
-        }
-    }
-
-    public function send($parameters)
-    {
-        $result = new Result();
-        $auth = $this->auth();
-
-        if (!$auth->isSuccess()) {
-            $result->addErrors($auth->getErrors());
-        }
-
-        $response = $this->client->SendSMS($parameters);
-        $message = $response->SendSMSResult->ResultArray[0];
-        if ($message !== Loc::getMessage('PS_SMS_TURBOSMS_SEND_SUCCESS_MESSAGE')) {
-            $result->addError(new Error($message));
-        }
-
-        return $result;
+        $this->client = new \SoapClient(
+            'https://turbosms.in.ua/api/wsdl.html',
+            [
+                'exceptions' => true,
+                'stream_context' => $context
+            ]
+        );
     }
 
     private function auth()
     {
-        $result = new Result();
-
         $response = $this->client->Auth(
             [
                 'login' => $this->login,
@@ -72,26 +43,36 @@ class TurboSMS
         );
 
         if ($response->AuthResult !== Loc::getMessage('PS_SMS_TURBOSMS_AUTH_SUCCESS_MESSAGE')) {
-            $result->addError(new Error($response->AuthResult));
+            throw new \RuntimeException('Auth error');
         }
 
-        return $result;
+        return true;
     }
 
     public function getBalance()
     {
-        $result = new Result();
-        $auth = $this->auth();
+        $this->auth();
 
-        if (!$auth->isSuccess()) {
-            $result->addErrors($auth->getErrors());
+        return new Balance($this->client->GetCreditBalance()->GetCreditBalanceResult);
+    }
+
+    public function getSenderList()
+    {
+        return new SenderCollection();
+    }
+
+    // todo
+    public function send($parameters)
+    {
+        $this->auth();
+
+        $response = $this->client->SendSMS($parameters);
+
+        $message = $response->SendSMSResult->ResultArray[0];
+        if ($message !== Loc::getMessage('PS_SMS_TURBOSMS_SEND_SUCCESS_MESSAGE')) {
+            throw new \RuntimeException($message);
         }
 
-        $response = $this->client->GetCreditBalance();
-        $balance = $response->GetCreditBalanceResult;
-
-        $result->setData(['balance' => $balance]);
-
-        return $result;
+        return true;
     }
 }

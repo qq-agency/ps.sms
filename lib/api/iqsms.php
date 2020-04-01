@@ -2,58 +2,33 @@
 
 namespace Ps\Sms\Api;
 
-use Bitrix\Main\ArgumentException;
-use Bitrix\Main\Error;
 use Bitrix\Main\Result;
 use Bitrix\Main\Web\HttpClient;
 use Bitrix\Main\Web\Json;
+use Ps\Sms\Model\Balance;
+use Ps\Sms\Model\Sender;
+use Ps\Sms\Model\SenderCollection;
+use RuntimeException;
 
-class IqSms
+class IqSms extends Base
 {
-    private $login;
-
-    private $password;
-
-    public function __construct($login, $password)
-    {
-        $this->login = $login;
-        $this->password = $password;
-    }
-
     public function getSenderList()
     {
-        $result = new Result();
+        $senderCollection = new SenderCollection();
 
-        $senders = [];
-        $response = $this->query('senders');
-
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-
-            return $result;
-        }
-
-        $data = $response->getData();
-
+        $data = $this->query('senders');
         foreach ($data['senders'] as $sender) {
             if (!in_array($sender['status'], ['default', 'active'])) {
                 continue;
             }
-            $senders[] = [
-                'id' => $sender['name'],
-                'name' => $sender['name']
-            ];
+            $senderCollection->append(new Sender($sender['name']));
         }
 
-        $result->setData($senders);
-
-        return $result;
+        return $senderCollection;
     }
 
     private function query($method, $parameters = [], $httpMethod = HttpClient::HTTP_GET, $useJson = false)
     {
-        $result = new Result();
-
         $http = new HttpClient();
         $http->setAuthorization($this->login, $this->password);
         $http->setHeader('Accept', 'application/json');
@@ -71,21 +46,27 @@ class IqSms
             );
         }
 
-        try {
-            $data = Json::decode($http->getResult());
-            if ($data['status'] === 'error') {
-                $result->addError(new Error($data['description']));
-
-                return $result;
-            }
-
-            $result->setData($data);
-        } catch (ArgumentException $e) {
+        $data = Json::decode($http->getResult());
+        if ($data['status'] === 'error') {
+            throw new RuntimeException($data['description']);
         }
 
-        return $result;
+        return $data;
     }
 
+    public function getBalance()
+    {
+        $data = $this->query('balance', [], HttpClient::HTTP_POST, true);
+        foreach ($data['balance'] as $item) {
+            if ($item['type'] === 'RUB') {
+                return new Balance($item['balance']);
+            }
+        }
+
+        throw new RuntimeException('error');
+    }
+
+    // todo:
     public function send($parameters)
     {
         $result = new Result();
@@ -94,21 +75,6 @@ class IqSms
         if (!$response->isSuccess()) {
             $result->addErrors($response->getErrors());
         }
-
-        return $result;
-    }
-
-    public function getBalance()
-    {
-        $result = new Result();
-
-        $response = $this->query('balance', [], HttpClient::HTTP_POST, true);
-
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-        }
-
-        $result->setData($response->getData());
 
         return $result;
     }

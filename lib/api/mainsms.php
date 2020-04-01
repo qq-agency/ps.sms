@@ -2,67 +2,40 @@
 
 namespace Ps\Sms\Api;
 
-use Bitrix\Main\ArgumentException;
-use Bitrix\Main\Error;
 use Bitrix\Main\Result;
 use Bitrix\Main\Web\HttpClient;
 use Bitrix\Main\Web\Json;
+use Ps\Sms\Model\Balance;
+use Ps\Sms\Model\Sender;
+use Ps\Sms\Model\SenderCollection;
 
-class MainSMS
+class MainSMS extends Base
 {
-    private $login;
-
-    private $password;
-
-    public function __construct($login, $password)
-    {
-        $this->login = $login;
-        $this->password = $password;
-    }
-
     public function getSenderList()
     {
-        $result = new Result();
-
         $signature = [
             'project' => $this->login,
         ];
 
-        $senders = [];
-        $response = $this->query(
+        $senderCollection = new SenderCollection();
+        $data = $this->query(
             'sender/list',
             [
                 'project' => $this->login,
                 'sign' => $this->getSignature($signature),
             ]
         );
-
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-
-            return $result;
-        }
-
-        $data = $response->getData();
-
         if (isset($data['senders'])) {
             foreach ($data['senders'] as $sender) {
-                $senders[] = [
-                    'id' => $sender,
-                    'name' => $sender
-                ];
+                $senderCollection->append(new Sender($sender));
             }
         }
 
-        $result->setData($senders);
-
-        return $result;
+        return $senderCollection;
     }
 
     private function query($method, $parameters = [], $httpMethod = HttpClient::HTTP_GET)
     {
-        $result = new Result();
-
         $http = new HttpClient();
         if ($httpMethod === HttpClient::HTTP_GET) {
             $http->query(
@@ -73,19 +46,12 @@ class MainSMS
             $http->query($httpMethod, 'https://mainsms.ru/api/mainsms/'.$method.'/', $parameters);
         }
 
-        try {
-            $data = Json::decode($http->getResult());
-            if (isset($data['error'])) {
-                $result->addError(new Error($data['message']));
-
-                return $result;
-            }
-
-            $result->setData($data);
-        } catch (ArgumentException $e) {
+        $data = Json::decode($http->getResult());
+        if (isset($data['error'])) {
+            throw new \RuntimeException($data['message']);
         }
 
-        return $result;
+        return $data;
     }
 
     private function getSignature($parameters)
@@ -95,6 +61,23 @@ class MainSMS
         return md5(sha1(implode(';', array_merge($parameters, [$this->password]))));
     }
 
+    public function getBalance()
+    {
+        $signature = [
+            'project' => $this->login,
+        ];
+
+        $parameters = [
+            'project' => $this->login,
+            'sign' => $this->getSignature($signature),
+        ];
+
+        $data = $this->query('message/balance', $parameters);
+
+        return new Balance($data['balance']);
+    }
+
+    // todo:
     public function send($parameters)
     {
         $result = new Result();
@@ -118,30 +101,6 @@ class MainSMS
         if (!$response->isSuccess()) {
             $result->addErrors($response->getErrors());
         }
-
-        return $result;
-    }
-
-    public function getBalance()
-    {
-        $result = new Result();
-
-        $signature = [
-            'project' => $this->login,
-        ];
-
-        $parameters = [
-            'project' => $this->login,
-            'sign' => $this->getSignature($signature),
-        ];
-
-        $response = $this->query('message/balance', $parameters);
-
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-        }
-
-        $result->setData($response->getData());
 
         return $result;
     }

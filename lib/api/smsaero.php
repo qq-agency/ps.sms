@@ -2,58 +2,33 @@
 
 namespace Ps\Sms\Api;
 
-use Bitrix\Main\ArgumentException;
-use Bitrix\Main\Error;
 use Bitrix\Main\Result;
 use Bitrix\Main\Web\HttpClient;
 use Bitrix\Main\Web\Json;
+use Ps\Sms\Model\Balance;
+use Ps\Sms\Model\Sender;
+use Ps\Sms\Model\SenderCollection;
 
-class SmsAero
+class SmsAero extends Base
 {
-    private $login;
-
-    private $password;
-
-    public function __construct($login, $password)
-    {
-        $this->login = $login;
-        $this->password = $password;
-    }
-
     public function getSenderList()
     {
-        $result = new Result();
+        $senderCollection = new SenderCollection();
+        $data = $this->query('sign/list');
 
-        $senders = [];
-        $response = $this->query('sign/list');
-
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-
-            return $result;
-        }
-
-        $data = $response->getData();
-
-        foreach ($data as $sender) {
-            if (!isset($sender['extendStatus']) || $sender['extendStatus'] !== 'active') {
+        foreach ($data['data'] as $sender) {
+            if (!isset($sender['extendStatus']) || ($sender['extendStatus'] !== 'active')) {
                 continue;
             }
-            $senders[] = [
-                'id' => $sender['name'],
-                'name' => $sender['name']
-            ];
+
+            $senderCollection->append(new Sender($sender['name']));
         }
 
-        $result->setData($senders);
-
-        return $result;
+        return $senderCollection;
     }
 
     private function query($method, $parameters = [], $httpMethod = HttpClient::HTTP_GET)
     {
-        $result = new Result();
-
         $http = new HttpClient();
         $http->setHeader('Accept', 'application/json');
         $http->setHeader('Content-Type', 'application/json');
@@ -64,21 +39,22 @@ class SmsAero
             $http->query($httpMethod, 'https://gate.smsaero.ru/v2/'.$method, $parameters);
         }
 
-        try {
-            $data = Json::decode($http->getResult());
-            if (!$data['success']) {
-                $result->addError(new Error($data['message']));
-
-                return $result;
-            }
-
-            $result->setData($data['data']);
-        } catch (ArgumentException $e) {
+        $data = Json::decode($http->getResult());
+        if (!$data['success']) {
+            throw new \RuntimeException($data['message']);
         }
 
-        return $result;
+        return $data;
     }
 
+    public function getBalance()
+    {
+        $data = $this->query('balance');
+
+        return new Balance($data['balance']);
+    }
+
+    // todo:
     public function send($parameters)
     {
         $result = new Result();
@@ -87,20 +63,6 @@ class SmsAero
         if (!$response->isSuccess()) {
             $result->addErrors($response->getErrors());
         }
-
-        return $result;
-    }
-
-    public function getBalance()
-    {
-        $result = new Result();
-
-        $response = $this->query('balance');
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-        }
-
-        $result->setData($response->getData());
 
         return $result;
     }

@@ -4,6 +4,8 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
     die();
 }
 
+$moduleId = 'ps.sms';
+
 use Bitrix\Main\Config\Option;
 use Bitrix\Main\Context;
 use Bitrix\Main\Loader;
@@ -11,7 +13,6 @@ use Bitrix\Main\LoaderException;
 use Bitrix\Main\Localization\Loc;
 use Bitrix\MessageService\Sender\Base;
 use Ps\Sms\Events;
-use Ps\Sms\Interfaces\HasBalance;
 use Ps\Sms\Interfaces\HasPreferences;
 use Ps\Sms\Interfaces\HasSender;
 use Ps\Sms\Interfaces\HasWarning;
@@ -20,7 +21,7 @@ Loc::loadMessages(__FILE__);
 
 try {
     Loader::includeModule('messageservice');
-    Loader::includeSharewareModule('ps.sms');
+    Loader::includeSharewareModule($moduleId);
 } catch (LoaderException $e) {
 }
 
@@ -30,9 +31,9 @@ $post = $context->getRequest()->getPostList()->toArray();
 if (is_array($post['settings']) && (count($post['settings']) > 0)) {
     foreach ($post['settings'] as $name => $val) {
         if (isset($val)) {
-            Option::set('ps.sms', $name, $val);
+            Option::set($moduleId, $name, $val);
         } else {
-            Option::delete('ps.sms', ['name' => $name]);
+            Option::delete($moduleId, ['name' => $name]);
         }
     }
 }
@@ -64,14 +65,14 @@ foreach ($providers as $provider) {
 $tabControl = new CAdminTabControl('tabControl', $tabs);
 $tabControl->Begin();
 
-echo '<form name="ps.sms" method="POST" action="'.$APPLICATION->GetCurPage(
-    ).'?mid=ps.sms&lang='.LANGUAGE_ID.'" enctype="multipart/form-data">'.bitrix_sessid_post();
+echo '<form name="'.$moduleId.'" method="POST" action="'.$APPLICATION->GetCurPage(
+    ).'?mid='.$moduleId.'&lang='.LANGUAGE_ID.'" enctype="multipart/form-data">'.bitrix_sessid_post();
 
 /** @var $provider Base */
 foreach ($providers as $provider) {
     $tabControl->BeginNextTab();
 
-    if ($provider instanceof HasBalance && $provider->canUse()) {
+    if ($provider->canUse()) {
         $balance = $provider->getBalance();
         ?>
         <tr>
@@ -115,7 +116,7 @@ foreach ($providers as $provider) {
         <td width="60%" class="adm-detail-content-cell-r">
             <input type="text" id="ps_sms_<?= $loginField ?>"
                    name="settings[<?= $loginField ?>]"
-                   value="<?= Option::get('ps.sms', $loginField) ?>"/>
+                   value="<?= Option::get($moduleId, $loginField) ?>"/>
         </td>
     </tr>
 
@@ -126,7 +127,7 @@ foreach ($providers as $provider) {
         <td width="60%" class="adm-detail-content-cell-r">
             <input type="password" id="ps_sms_<?= $passwordField ?>"
                    name="settings[<?= $passwordField ?>]"
-                   value="<?= Option::get('ps.sms', $passwordField) ?>"/>
+                   value="<?= Option::get($moduleId, $passwordField) ?>"/>
         </td>
     </tr>
 
@@ -140,7 +141,7 @@ foreach ($providers as $provider) {
             <td width="60%" class="adm-detail-content-cell-r">
                 <input type="text" id="ps_sms_<?= $senderField ?>"
                        name="settings[<?= $senderField ?>]"
-                       value="<?= Option::get('ps.sms', $senderField) ?>"/>
+                       value="<?= Option::get($moduleId, $senderField) ?>"/>
             </td>
         </tr>
         <?php

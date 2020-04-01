@@ -2,36 +2,24 @@
 
 namespace Ps\Sms\Api;
 
-use Bitrix\Main\ArgumentException;
-use Bitrix\Main\Error;
-use Bitrix\Main\Result;
 use Bitrix\Main\Web\HttpClient;
 use Bitrix\Main\Web\Json;
+use Ps\Sms\Model\Balance;
+use Ps\Sms\Model\Sender;
+use Ps\Sms\Model\SenderCollection;
+use RuntimeException;
 
-class Intis
+class Intis extends Base
 {
-    private $login;
-
-    private $password;
-
-    public function __construct($login, $password)
-    {
-        $this->login = $login;
-        $this->password = $password;
-    }
-
     public function getSenderList()
     {
-        $result = new Result();
-
         $timestamp = $this->getTimestamp();
         $signature = [
             'timestamp' => $timestamp,
             'login' => $this->login,
         ];
 
-        $senders = [];
-        $response = $this->query(
+        $data = $this->query(
             'senders',
             [
                 'login' => $this->login,
@@ -40,27 +28,16 @@ class Intis
             ]
         );
 
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-
-            return $result;
-        }
-
-        $data = $response->getData();
-
+        $senderCollection = new SenderCollection();
         foreach ($data as $sender => $status) {
             if ($status !== 'completed') {
                 continue;
             }
-            $senders[] = [
-                'id' => $sender,
-                'name' => $sender
-            ];
+
+            $senderCollection->append(new Sender($sender));
         }
 
-        $result->setData($senders);
-
-        return $result;
+        return $senderCollection;
     }
 
     private function getTimestamp()
@@ -73,8 +50,6 @@ class Intis
 
     private function query($method, $parameters = [], $httpMethod = HttpClient::HTTP_GET)
     {
-        $result = new Result();
-
         $http = new HttpClient();
         if ($httpMethod === HttpClient::HTTP_GET) {
             $http->query($httpMethod, 'https://new.sms16.ru/get/'.$method.'.php?'.http_build_query($parameters));
@@ -82,19 +57,12 @@ class Intis
             $http->query($httpMethod, 'https://new.sms16.ru/get/'.$method.'.php', $parameters);
         }
 
-        try {
-            $data = Json::decode($http->getResult());
-            if (isset($data['error'])) {
-                $result->addError(new Error($data['error']));
-
-                return $result;
-            }
-
-            $result->setData($data);
-        } catch (ArgumentException $e) {
+        $data = Json::decode($http->getResult());
+        if (isset($data['error'])) {
+            throw new RuntimeException($data['error']);
         }
 
-        return $result;
+        return $data;
     }
 
     private function getSignature($parameters)
@@ -105,40 +73,8 @@ class Intis
         return md5(implode($parameters).$this->password);
     }
 
-    public function send($parameters)
-    {
-        $result = new Result();
-
-        $timestamp = $this->getTimestamp();
-        $signature = array_merge(
-            $parameters,
-            [
-                'timestamp' => $timestamp,
-                'login' => $this->login,
-            ]
-        );
-
-        $parameters = array_merge(
-            $parameters,
-            [
-                'login' => $this->login,
-                'signature' => $this->getSignature($signature),
-                'timestamp' => $timestamp
-            ]
-        );
-
-        $response = $this->query('send', $parameters);
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-        }
-
-        return $result;
-    }
-
     public function getBalance()
     {
-        $result = new Result();
-
         $timestamp = $this->getTimestamp();
         $signature = [
             'timestamp' => $timestamp,
@@ -151,13 +87,37 @@ class Intis
             'timestamp' => $timestamp
         ];
 
-        $response = $this->query('balance', $parameters);
-        if (!$response->isSuccess()) {
-            $result->addErrors($response->getErrors());
-        }
+        $data = $this->query('balance', $parameters);
 
-        $result->setData($response->getData());
+        return new Balance($data['money']);
+    }
 
-        return $result;
+    public function send($message)
+    {
+        $data = [
+            'phones' => $message->getPhone(),
+            'mes' => $message->getText(),
+            'sender' => $message->getSender()
+        ];
+
+        $timestamp = $this->getTimestamp();
+        $signature = array_merge(
+            $data,
+            [
+                'timestamp' => $timestamp,
+                'login' => $this->login,
+            ]
+        );
+
+        $parameters = array_merge(
+            $data,
+            [
+                'login' => $this->login,
+                'signature' => $this->getSignature($signature),
+                'timestamp' => $timestamp
+            ]
+        );
+
+        return $this->query('send', $parameters, HttpClient::HTTP_POST);
     }
 }
